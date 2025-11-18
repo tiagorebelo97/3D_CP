@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D House Planner</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header class="header">
+            <h1>🏠 3D House Planner</h1>
+            <div class="header-controls">
+                <button id="clearBtn" class="btn btn-danger">Clear All</button>
+                <button id="exportBtn" class="btn btn-primary">Export Plan</button>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <div class="main-content">
+            <!-- Sidebar -->
+            <aside class="sidebar">
+                <div class="tool-section">
+                    <h3>Tools</h3>
+                    <div class="tool-buttons">
+                        <button class="tool-btn active" data-tool="select" title="Select (ESC)">
+                            <span class="icon">🖱️</span>
+                            <span class="label">Select</span>
+                            <span class="shortcut">ESC</span>
+                        </button>
+                        <button class="tool-btn" data-tool="wall" title="Wall (W)">
+                            <span class="icon">🧱</span>
+                            <span class="label">Wall</span>
+                            <span class="shortcut">W</span>
+                        </button>
+                        <button class="tool-btn" data-tool="door" title="Door (D)">
+                            <span class="icon">🚪</span>
+                            <span class="label">Door</span>
+                            <span class="shortcut">D</span>
+                        </button>
+                        <button class="tool-btn" data-tool="window" title="Window (I)">
+                            <span class="icon">🪟</span>
+                            <span class="label">Window</span>
+                            <span class="shortcut">I</span>
+                        </button>
+                        <button class="tool-btn" data-tool="delete" title="Delete (DEL)">
+                            <span class="icon">🗑️</span>
+                            <span class="label">Delete</span>
+                            <span class="shortcut">DEL</span>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="properties-section">
+                    <h3>Properties</h3>
+                    <div class="property-group">
+                        <label for="wallHeight">Wall Height (m)</label>
+                        <input type="number" id="wallHeight" value="3" min="1" max="10" step="0.1">
+                    </div>
+                    <div class="property-group">
+                        <label for="wallThickness">Wall Thickness (m)</label>
+                        <input type="number" id="wallThickness" value="0.2" min="0.1" max="1" step="0.05">
+                    </div>
+                    <div class="property-group">
+                        <label for="doorWidth">Door Width (m)</label>
+                        <input type="number" id="doorWidth" value="0.9" min="0.5" max="2" step="0.1">
+                    </div>
+                    <div class="property-group">
+                        <label for="windowWidth">Window Width (m)</label>
+                        <input type="number" id="windowWidth" value="1.2" min="0.5" max="3" step="0.1">
+                    </div>
+                    <div class="property-group">
+                        <label>
+                            <input type="checkbox" id="snapToGrid" checked>
+                            Snap to Grid
+                        </label>
+                    </div>
+                    <div class="property-group">
+                        <label for="gridSize">Grid Size (m)</label>
+                        <input type="number" id="gridSize" value="0.5" min="0.1" max="2" step="0.1">
+                    </div>
+                </div>
+
+                <div class="view-section">
+                    <h3>View Controls</h3>
+                    <div class="view-buttons">
+                        <button class="btn btn-secondary" id="view2D">2D View</button>
+                        <button class="btn btn-secondary active" id="view3D">3D View</button>
+                    </div>
+                    <div class="view-buttons">
+                        <button class="btn btn-secondary" id="resetView">Reset Camera</button>
+                    </div>
+                </div>
+
+                <div class="info-section">
+                    <h3>Keyboard Shortcuts</h3>
+                    <ul class="shortcuts-list">
+                        <li><kbd>W</kbd> - Wall tool</li>
+                        <li><kbd>D</kbd> - Door tool</li>
+                        <li><kbd>I</kbd> - Window tool</li>
+                        <li><kbd>ESC</kbd> - Select tool</li>
+                        <li><kbd>DEL</kbd> - Delete selected</li>
+                        <li><kbd>Mouse Wheel</kbd> - Zoom</li>
+                        <li><kbd>Right Click + Drag</kbd> - Rotate</li>
+                    </ul>
+                </div>
+            </aside>
+
+            <!-- Canvas Area -->
+            <div class="canvas-container">
+                <div id="canvas-wrapper">
+                    <canvas id="renderCanvas"></canvas>
+                </div>
+                <div class="status-bar">
+                    <span id="statusText">Ready - Select a tool to start</span>
+                    <span id="cursorPos">X: 0.00 m, Y: 0.00 m</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
