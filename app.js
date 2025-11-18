@@ -623,7 +623,7 @@ function selectObject(worldPos) {
                 obj.x2, obj.y2
             );
             
-            if (dist < 0.3) {
+            if (dist < 0.5) {  // Increased from 0.3 to 0.5 for easier selection
                 selectedObject = obj;
                 updateStatus(`Selected ${obj.type} (${obj.length.toFixed(2)}m)`);
                 updateSelectionPanel();
@@ -660,7 +660,7 @@ function deleteObject(worldPos) {
                 obj.x2, obj.y2
             );
             
-            if (dist < 0.3) {
+            if (dist < 0.5) {  // Increased for easier selection
                 objects.splice(i, 1);
                 updateStatus(`Deleted ${obj.type}`);
                 return;
@@ -793,7 +793,7 @@ function isPointInObject(point, obj) {
             obj.x1, obj.y1,
             obj.x2, obj.y2
         );
-        return dist < 0.3;
+        return dist < 0.5;  // Increased for easier selection
     } else {
         const dx = Math.abs(point.x - obj.x);
         const dy = Math.abs(point.y - obj.y);
