@@ -82,6 +82,37 @@
                     </div>
                 </div>
 
+                <div class="selection-section" id="selectionPanel" style="display: none;">
+                    <h3>Selected Object</h3>
+                    <div class="property-group">
+                        <label id="objectTypeLabel">Type: None</label>
+                    </div>
+                    <div class="property-group" id="positionGroup">
+                        <label>Position X (m)</label>
+                        <input type="number" id="objectX" step="0.1">
+                    </div>
+                    <div class="property-group" id="positionYGroup">
+                        <label>Position Y (m)</label>
+                        <input type="number" id="objectY" step="0.1">
+                    </div>
+                    <div class="property-group" id="rotationGroup">
+                        <label>Rotation (degrees)</label>
+                        <input type="number" id="objectRotation" min="0" max="360" step="1" value="0">
+                    </div>
+                    <div class="property-group" id="lengthGroup" style="display: none;">
+                        <label>Length (m)</label>
+                        <input type="number" id="objectLength" step="0.1" readonly>
+                    </div>
+                    <div class="property-group" id="widthGroup" style="display: none;">
+                        <label>Width (m)</label>
+                        <input type="number" id="objectWidth" step="0.1">
+                    </div>
+                    <div class="action-buttons">
+                        <button class="btn btn-secondary" id="duplicateBtn">Duplicate (Ctrl+D)</button>
+                        <button class="btn btn-danger" id="deleteSelectedBtn">Delete (Del)</button>
+                    </div>
+                </div>
+
                 <div class="view-section">
                     <h3>View Controls</h3>
                     <div class="view-buttons">
@@ -90,6 +121,10 @@
                     </div>
                     <div class="view-buttons">
                         <button class="btn btn-secondary" id="resetView">Reset Camera</button>
+                    </div>
+                    <div class="view-buttons">
+                        <button class="btn btn-secondary" id="undoBtn" disabled>Undo (Ctrl+Z)</button>
+                        <button class="btn btn-secondary" id="redoBtn" disabled>Redo (Ctrl+Y)</button>
                     </div>
                 </div>
 
@@ -101,8 +136,12 @@
                         <li><kbd>I</kbd> - Window tool</li>
                         <li><kbd>ESC</kbd> - Select tool</li>
                         <li><kbd>DEL</kbd> - Delete selected</li>
+                        <li><kbd>Ctrl+D</kbd> - Duplicate</li>
+                        <li><kbd>Ctrl+Z</kbd> - Undo</li>
+                        <li><kbd>Ctrl+Y</kbd> - Redo</li>
+                        <li><kbd>R</kbd> - Rotate 90°</li>
                         <li><kbd>Mouse Wheel</kbd> - Zoom</li>
-                        <li><kbd>Right Click + Drag</kbd> - Rotate</li>
+                        <li><kbd>Right Click + Drag</kbd> - Pan</li>
                     </ul>
                 </div>
             </aside>
