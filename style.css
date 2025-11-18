@@ -88,6 +88,7 @@ body {
 
 .tool-section,
 .properties-section,
+.selection-section,
 .view-section,
 .info-section {
     margin-bottom: 2rem;
@@ -324,6 +325,24 @@ kbd {
 
 .sidebar::-webkit-scrollbar-thumb:hover {
     background: var(--secondary-color);
+}
+
+/* Selection Panel */
+.selection-section {
+    background: #f0f4ff;
+    padding: 1rem;
+    border-radius: 0.5rem;
+}
+
+.action-buttons {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    margin-top: 1rem;
+}
+
+.action-buttons .btn {
+    width: 100%;
 }
 
 /* Responsive Design */

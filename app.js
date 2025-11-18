@@ -14,6 +14,12 @@ let camera = {
 };
 let isDragging = false;
 let lastMousePos = { x: 0, y: 0 };
+let isDraggingObject = false;
+let dragOffset = { x: 0, y: 0 };
+let activeHandle = null;
+let history = [];
+let historyIndex = -1;
+let hoveredHandle = null;
 
 // Configuration
 const config = {
@@ -25,7 +31,9 @@ const config = {
     windowHeight: 1.2,
     windowSillHeight: 1.0,
     snapToGrid: true,
-    gridSize: 0.5
+    gridSize: 0.5,
+    handleSize: 8,
+    maxHistory: 50
 };
 
 // Colors
@@ -41,7 +49,12 @@ const COLORS = {
     doorHandle: '#ffd700',
     window: '#87ceeb',
     windowFrame: '#8b7355',
-    windowDivider: '#ffffff'
+    windowDivider: '#ffffff',
+    handle: '#4f46e5',
+    handleHover: '#6366f1',
+    measurement: '#1e293b',
+    measurementBg: 'rgba(255, 255, 255, 0.9)',
+    guideline: '#10b981'
 };
 
 // Initialize the application
@@ -51,6 +64,11 @@ function init() {
     
     // Set canvas size
     resizeCanvas();
+    
+    // Initialize history
+    history.push(JSON.parse(JSON.stringify(objects)));
+    historyIndex = 0;
+    updateUndoRedoButtons();
     
     // Event listeners
     setupEventListeners();
@@ -109,6 +127,78 @@ function setupEventListeners() {
         config.gridSize = parseFloat(e.target.value);
     });
 
+    // Selection panel controls
+    const objectX = document.getElementById('objectX');
+    const objectY = document.getElementById('objectY');
+    const objectRotation = document.getElementById('objectRotation');
+    const objectWidth = document.getElementById('objectWidth');
+    
+    if (objectX) {
+        objectX.addEventListener('change', (e) => {
+            if (selectedObject) {
+                saveHistory();
+                if (selectedObject.type === 'wall') {
+                    const dx = parseFloat(e.target.value) - selectedObject.x1;
+                    selectedObject.x1 = parseFloat(e.target.value);
+                    selectedObject.x2 += dx;
+                } else {
+                    selectedObject.x = parseFloat(e.target.value);
+                }
+            }
+        });
+    }
+    
+    if (objectY) {
+        objectY.addEventListener('change', (e) => {
+            if (selectedObject) {
+                saveHistory();
+                if (selectedObject.type === 'wall') {
+                    const dy = parseFloat(e.target.value) - selectedObject.y1;
+                    selectedObject.y1 = parseFloat(e.target.value);
+                    selectedObject.y2 += dy;
+                } else {
+                    selectedObject.y = parseFloat(e.target.value);
+                }
+            }
+        });
+    }
+    
+    if (objectRotation) {
+        objectRotation.addEventListener('change', (e) => {
+            if (selectedObject && selectedObject.type !== 'wall') {
+                saveHistory();
+                selectedObject.rotation = parseFloat(e.target.value);
+            }
+        });
+    }
+    
+    if (objectWidth) {
+        objectWidth.addEventListener('change', (e) => {
+            if (selectedObject && selectedObject.type !== 'wall') {
+                saveHistory();
+                selectedObject.width = parseFloat(e.target.value);
+            }
+        });
+    }
+    
+    // Selection panel buttons
+    const duplicateBtn = document.getElementById('duplicateBtn');
+    const deleteSelectedBtn = document.getElementById('deleteSelectedBtn');
+    
+    if (duplicateBtn) {
+        duplicateBtn.addEventListener('click', duplicateSelected);
+    }
+    
+    if (deleteSelectedBtn) {
+        deleteSelectedBtn.addEventListener('click', () => {
+            if (selectedObject) {
+                removeObject(selectedObject);
+                selectedObject = null;
+                updateSelectionPanel();
+            }
+        });
+    }
+
     // View buttons
     document.getElementById('view2D').addEventListener('click', () => {
         set2DView();
@@ -119,6 +209,10 @@ function setupEventListeners() {
     document.getElementById('resetView').addEventListener('click', () => {
         resetCamera();
     });
+    
+    // Undo/Redo buttons
+    document.getElementById('undoBtn').addEventListener('click', undo);
+    document.getElementById('redoBtn').addEventListener('click', redo);
 
     // Header buttons
     document.getElementById('clearBtn').addEventListener('click', clearAll);
@@ -200,6 +294,27 @@ function onMouseDown(event) {
     const worldPos = screenToWorld(mouseX, mouseY);
     
     if (currentTool === 'select') {
+        // Check if clicking on a handle
+        const handle = getHandleAtPosition(worldPos);
+        if (handle) {
+            activeHandle = handle;
+            saveHistory();
+            return;
+        }
+        
+        // Check if clicking on selected object to drag it
+        if (selectedObject && isPointInObject(worldPos, selectedObject)) {
+            isDraggingObject = true;
+            dragOffset = {
+                x: worldPos.x - (selectedObject.type === 'wall' ? selectedObject.x1 : selectedObject.x),
+                y: worldPos.y - (selectedObject.type === 'wall' ? selectedObject.y1 : selectedObject.y)
+            };
+            saveHistory();
+            canvas.style.cursor = 'grabbing';
+            return;
+        }
+        
+        // Otherwise select a new object
         selectObject(worldPos);
     } else if (currentTool === 'delete') {
         deleteObject(worldPos);
@@ -229,6 +344,48 @@ function onMouseMove(event) {
     // Update cursor position display
     updateCursorPosition(worldPos);
     
+    // Handle object dragging
+    if (isDraggingObject && selectedObject) {
+        const newX = worldPos.x - dragOffset.x;
+        const newY = worldPos.y - dragOffset.y;
+        
+        if (selectedObject.type === 'wall') {
+            const dx = newX - selectedObject.x1;
+            const dy = newY - selectedObject.y1;
+            selectedObject.x1 = snapToGrid({x: newX, y: newY}).x;
+            selectedObject.y1 = snapToGrid({x: newX, y: newY}).y;
+            selectedObject.x2 += dx;
+            selectedObject.y2 += dy;
+            selectedObject.x2 = snapToGrid({x: selectedObject.x2, y: selectedObject.y2}).x;
+            selectedObject.y2 = snapToGrid({x: selectedObject.x2, y: selectedObject.y2}).y;
+        } else {
+            const snapped = snapToGrid({x: newX, y: newY});
+            selectedObject.x = snapped.x;
+            selectedObject.y = snapped.y;
+        }
+        updateSelectionPanel();
+        return;
+    }
+    
+    // Handle resizing with handles
+    if (activeHandle && selectedObject) {
+        handleObjectResize(worldPos);
+        return;
+    }
+    
+    // Update hover state for handles
+    if (currentTool === 'select' && selectedObject) {
+        const handle = getHandleAtPosition(worldPos);
+        hoveredHandle = handle;
+        if (handle) {
+            canvas.style.cursor = 'pointer';
+        } else if (selectedObject && isPointInObject(worldPos, selectedObject)) {
+            canvas.style.cursor = 'move';
+        } else {
+            canvas.style.cursor = 'default';
+        }
+    }
+    
     // Update drawing preview
     if (isDrawing && tempObject && currentTool === 'wall') {
         updateWallPreview(worldPos);
@@ -239,6 +396,19 @@ function onMouseUp(event) {
     if (event.button === 2) {
         isDragging = false;
         canvas.style.cursor = currentTool === 'select' ? 'default' : 'crosshair';
+        return;
+    }
+    
+    if (isDraggingObject) {
+        isDraggingObject = false;
+        canvas.style.cursor = currentTool === 'select' ? 'default' : 'crosshair';
+        updateSelectionPanel();
+        return;
+    }
+    
+    if (activeHandle) {
+        activeHandle = null;
+        updateSelectionPanel();
         return;
     }
     
@@ -257,6 +427,25 @@ function onWheel(event) {
 // Keyboard event handler
 function onKeyDown(event) {
     const key = event.key.toLowerCase();
+    
+    // Handle Ctrl combinations
+    if (event.ctrlKey || event.metaKey) {
+        switch(key) {
+            case 'z':
+                undo();
+                event.preventDefault();
+                break;
+            case 'y':
+                redo();
+                event.preventDefault();
+                break;
+            case 'd':
+                duplicateSelected();
+                event.preventDefault();
+                break;
+        }
+        return;
+    }
     
     switch(key) {
         case 'w':
@@ -277,10 +466,20 @@ function onKeyDown(event) {
             break;
         case 'delete':
             if (selectedObject) {
+                saveHistory();
                 removeObject(selectedObject);
                 selectedObject = null;
+                updateSelectionPanel();
             }
             event.preventDefault();
+            break;
+        case 'r':
+            if (selectedObject && selectedObject.type !== 'wall') {
+                saveHistory();
+                selectedObject.rotation = (selectedObject.rotation + 90) % 360;
+                updateSelectionPanel();
+                event.preventDefault();
+            }
             break;
     }
 }
@@ -329,6 +528,8 @@ function startDrawingWall(point) {
     point = snapToGrid(point);
     startPoint = { x: point.x, y: point.y };
     isDrawing = true;
+    
+    saveHistory();
     
     tempObject = {
         type: 'wall',
@@ -382,6 +583,8 @@ function finishDrawingWall() {
 function placeObject(point, type) {
     point = snapToGrid(point);
     
+    saveHistory();
+    
     const object = {
         type: type,
         x: point.x,
@@ -423,6 +626,7 @@ function selectObject(worldPos) {
             if (dist < 0.3) {
                 selectedObject = obj;
                 updateStatus(`Selected ${obj.type} (${obj.length.toFixed(2)}m)`);
+                updateSelectionPanel();
                 return;
             }
         } else {
@@ -434,12 +638,14 @@ function selectObject(worldPos) {
             if (dx < threshold && dy < threshold) {
                 selectedObject = obj;
                 updateStatus(`Selected ${obj.type}`);
+                updateSelectionPanel();
                 return;
             }
         }
     }
     
     updateStatus('No object selected');
+    updateSelectionPanel();
 }
 
 // Delete object
@@ -488,8 +694,10 @@ function clearAll() {
     
     if (!confirm('Are you sure you want to clear all objects?')) return;
     
+    saveHistory();
     objects = [];
     selectedObject = null;
+    updateSelectionPanel();
     updateStatus('All objects cleared');
 }
 
@@ -577,6 +785,255 @@ function distanceToLineSegment(px, py, x1, y1, x2, y2) {
     return Math.sqrt((px - projX) * (px - projX) + (py - projY) * (py - projY));
 }
 
+// Check if point is inside object
+function isPointInObject(point, obj) {
+    if (obj.type === 'wall') {
+        const dist = distanceToLineSegment(
+            point.x, point.y,
+            obj.x1, obj.y1,
+            obj.x2, obj.y2
+        );
+        return dist < 0.3;
+    } else {
+        const dx = Math.abs(point.x - obj.x);
+        const dy = Math.abs(point.y - obj.y);
+        const threshold = obj.width / 2 + 0.2;
+        return dx < threshold && dy < threshold;
+    }
+}
+
+// Get handle at position
+function getHandleAtPosition(worldPos) {
+    if (!selectedObject) return null;
+    
+    const handleSize = config.handleSize / (30 * camera.zoom);
+    
+    if (selectedObject.type === 'wall') {
+        // Check endpoints
+        const dist1 = Math.sqrt(
+            Math.pow(worldPos.x - selectedObject.x1, 2) + 
+            Math.pow(worldPos.y - selectedObject.y1, 2)
+        );
+        const dist2 = Math.sqrt(
+            Math.pow(worldPos.x - selectedObject.x2, 2) + 
+            Math.pow(worldPos.y - selectedObject.y2, 2)
+        );
+        
+        if (dist1 < handleSize) {
+            return { type: 'wall-start', object: selectedObject };
+        }
+        if (dist2 < handleSize) {
+            return { type: 'wall-end', object: selectedObject };
+        }
+    } else {
+        // Check rotation handle (top of object)
+        const rotHandleX = selectedObject.x;
+        const rotHandleY = selectedObject.y - selectedObject.width / 2 - 0.3;
+        const distRot = Math.sqrt(
+            Math.pow(worldPos.x - rotHandleX, 2) + 
+            Math.pow(worldPos.y - rotHandleY, 2)
+        );
+        
+        if (distRot < handleSize) {
+            return { type: 'rotation', object: selectedObject };
+        }
+        
+        // Check resize handles (corners)
+        const halfWidth = selectedObject.width / 2;
+        const corners = [
+            { x: selectedObject.x - halfWidth, y: selectedObject.y - halfWidth, type: 'resize-nw' },
+            { x: selectedObject.x + halfWidth, y: selectedObject.y - halfWidth, type: 'resize-ne' },
+            { x: selectedObject.x - halfWidth, y: selectedObject.y + halfWidth, type: 'resize-sw' },
+            { x: selectedObject.x + halfWidth, y: selectedObject.y + halfWidth, type: 'resize-se' }
+        ];
+        
+        for (const corner of corners) {
+            const dist = Math.sqrt(
+                Math.pow(worldPos.x - corner.x, 2) + 
+                Math.pow(worldPos.y - corner.y, 2)
+            );
+            if (dist < handleSize) {
+                return { type: corner.type, object: selectedObject };
+            }
+        }
+    }
+    
+    return null;
+}
+
+// Handle object resize
+function handleObjectResize(worldPos) {
+    if (!activeHandle || !selectedObject) return;
+    
+    const snapped = snapToGrid(worldPos);
+    
+    if (activeHandle.type === 'wall-start') {
+        selectedObject.x1 = snapped.x;
+        selectedObject.y1 = snapped.y;
+        updateWallLength(selectedObject);
+    } else if (activeHandle.type === 'wall-end') {
+        selectedObject.x2 = snapped.x;
+        selectedObject.y2 = snapped.y;
+        updateWallLength(selectedObject);
+    } else if (activeHandle.type === 'rotation') {
+        // Calculate rotation angle
+        const dx = worldPos.x - selectedObject.x;
+        const dy = worldPos.y - selectedObject.y;
+        let angle = Math.atan2(dy, dx) * (180 / Math.PI) + 90;
+        if (angle < 0) angle += 360;
+        selectedObject.rotation = Math.round(angle);
+    } else if (activeHandle.type.startsWith('resize-')) {
+        // Calculate new width based on distance from center
+        const dx = worldPos.x - selectedObject.x;
+        const dy = worldPos.y - selectedObject.y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        selectedObject.width = Math.max(0.5, Math.round(dist * 2 * 10) / 10);
+    }
+}
+
+// Update wall length
+function updateWallLength(wall) {
+    const dx = wall.x2 - wall.x1;
+    const dy = wall.y2 - wall.y1;
+    wall.length = Math.sqrt(dx * dx + dy * dy);
+}
+
+// History management
+function saveHistory() {
+    // Remove any redo history
+    history = history.slice(0, historyIndex + 1);
+    
+    // Save current state
+    const state = JSON.parse(JSON.stringify(objects));
+    history.push(state);
+    
+    // Limit history size
+    if (history.length > config.maxHistory) {
+        history.shift();
+    } else {
+        historyIndex++;
+    }
+    
+    updateUndoRedoButtons();
+}
+
+function undo() {
+    if (historyIndex > 0) {
+        historyIndex--;
+        objects = JSON.parse(JSON.stringify(history[historyIndex]));
+        selectedObject = null;
+        updateSelectionPanel();
+        updateUndoRedoButtons();
+        updateStatus('Undo');
+    }
+}
+
+function redo() {
+    if (historyIndex < history.length - 1) {
+        historyIndex++;
+        objects = JSON.parse(JSON.stringify(history[historyIndex]));
+        selectedObject = null;
+        updateSelectionPanel();
+        updateUndoRedoButtons();
+        updateStatus('Redo');
+    }
+}
+
+function updateUndoRedoButtons() {
+    const undoBtn = document.getElementById('undoBtn');
+    const redoBtn = document.getElementById('redoBtn');
+    
+    if (undoBtn) {
+        undoBtn.disabled = historyIndex <= 0;
+    }
+    if (redoBtn) {
+        redoBtn.disabled = historyIndex >= history.length - 1;
+    }
+}
+
+// Duplicate selected object
+function duplicateSelected() {
+    if (!selectedObject) return;
+    
+    saveHistory();
+    
+    const newObj = JSON.parse(JSON.stringify(selectedObject));
+    newObj.id = Date.now();
+    
+    if (newObj.type === 'wall') {
+        newObj.x1 += 1;
+        newObj.y1 += 1;
+        newObj.x2 += 1;
+        newObj.y2 += 1;
+    } else {
+        newObj.x += 1;
+        newObj.y += 1;
+    }
+    
+    objects.push(newObj);
+    selectedObject = newObj;
+    updateSelectionPanel();
+    updateStatus(`Duplicated ${newObj.type}`);
+}
+
+// Update selection panel
+function updateSelectionPanel() {
+    const panel = document.getElementById('selectionPanel');
+    const typeLabel = document.getElementById('objectTypeLabel');
+    const objectX = document.getElementById('objectX');
+    const objectY = document.getElementById('objectY');
+    const objectRotation = document.getElementById('objectRotation');
+    const objectLength = document.getElementById('objectLength');
+    const objectWidth = document.getElementById('objectWidth');
+    const lengthGroup = document.getElementById('lengthGroup');
+    const widthGroup = document.getElementById('widthGroup');
+    const rotationGroup = document.getElementById('rotationGroup');
+    
+    if (!selectedObject) {
+        panel.style.display = 'none';
+        return;
+    }
+    
+    panel.style.display = 'block';
+    typeLabel.textContent = `Type: ${selectedObject.type.charAt(0).toUpperCase() + selectedObject.type.slice(1)}`;
+    
+    if (selectedObject.type === 'wall') {
+        objectX.value = selectedObject.x1.toFixed(2);
+        objectY.value = selectedObject.y1.toFixed(2);
+        objectLength.value = selectedObject.length.toFixed(2);
+        lengthGroup.style.display = 'block';
+        widthGroup.style.display = 'none';
+        rotationGroup.style.display = 'none';
+    } else {
+        objectX.value = selectedObject.x.toFixed(2);
+        objectY.value = selectedObject.y.toFixed(2);
+        objectRotation.value = selectedObject.rotation || 0;
+        objectWidth.value = selectedObject.width.toFixed(2);
+        lengthGroup.style.display = 'none';
+        widthGroup.style.display = 'block';
+        rotationGroup.style.display = 'block';
+    }
+}
+
+// Distance from point to line segment
+function distanceToLineSegment(px, py, x1, y1, x2, y2) {
+    const dx = x2 - x1;
+    const dy = y2 - y1;
+    const lengthSquared = dx * dx + dy * dy;
+    
+    if (lengthSquared === 0) {
+        return Math.sqrt((px - x1) * (px - x1) + (py - y1) * (py - y1));
+    }
+    
+    let t = ((px - x1) * dx + (py - y1) * dy) / lengthSquared;
+    t = Math.max(0, Math.min(1, t));
+    
+    const projX = x1 + t * dx;
+    const projY = y1 + t * dy;
+    
+    return Math.sqrt((px - projX) * (px - projX) + (py - projY) * (py - projY));
+}
+
 // Render functions
 function render() {
     // Clear canvas
@@ -601,7 +1058,13 @@ function render() {
     if (tempObject && isDrawing) {
         if (tempObject.type === 'wall') {
             drawWall(tempObject, false);
+            drawWallMeasurement(tempObject);
         }
+    }
+    
+    // Draw handles for selected object
+    if (selectedObject && currentTool === 'select') {
+        drawHandles(selectedObject);
     }
 }
 
@@ -856,6 +1319,131 @@ function drawWindow(window, isSelected) {
         ctx.moveTo(pos.x, pos.y - w/2);
         ctx.lineTo(pos.x, pos.y + w/2);
         ctx.stroke();
+    }
+}
+
+// Draw handles for selected object
+function drawHandles(obj) {
+    if (obj.type === 'wall') {
+        // Draw endpoint handles
+        const p1 = worldToScreen(obj.x1, obj.y1, 0);
+        const p2 = worldToScreen(obj.x2, obj.y2, 0);
+        
+        ctx.fillStyle = hoveredHandle && hoveredHandle.type === 'wall-start' ? COLORS.handleHover : COLORS.handle;
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 2;
+        
+        ctx.beginPath();
+        ctx.arc(p1.x, p1.y, config.handleSize, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+        
+        ctx.fillStyle = hoveredHandle && hoveredHandle.type === 'wall-end' ? COLORS.handleHover : COLORS.handle;
+        ctx.beginPath();
+        ctx.arc(p2.x, p2.y, config.handleSize, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+        
+        // Draw wall measurement
+        drawWallMeasurement(obj);
+    } else {
+        // Draw rotation handle
+        const rotHandlePos = worldToScreen(obj.x, obj.y - obj.width / 2 - 0.3, 0);
+        const centerPos = worldToScreen(obj.x, obj.y, 0);
+        
+        // Line to rotation handle
+        ctx.strokeStyle = COLORS.handle;
+        ctx.lineWidth = 2;
+        ctx.setLineDash([5, 5]);
+        ctx.beginPath();
+        ctx.moveTo(centerPos.x, centerPos.y);
+        ctx.lineTo(rotHandlePos.x, rotHandlePos.y);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        
+        // Rotation handle
+        ctx.fillStyle = hoveredHandle && hoveredHandle.type === 'rotation' ? COLORS.handleHover : COLORS.handle;
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(rotHandlePos.x, rotHandlePos.y, config.handleSize, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+        
+        // Draw resize handles at corners
+        const halfWidth = obj.width / 2;
+        const corners = [
+            { x: obj.x - halfWidth, y: obj.y - halfWidth },
+            { x: obj.x + halfWidth, y: obj.y - halfWidth },
+            { x: obj.x - halfWidth, y: obj.y + halfWidth },
+            { x: obj.x + halfWidth, y: obj.y + halfWidth }
+        ];
+        
+        corners.forEach((corner, idx) => {
+            const pos = worldToScreen(corner.x, corner.y, 0);
+            const types = ['resize-nw', 'resize-ne', 'resize-sw', 'resize-se'];
+            ctx.fillStyle = hoveredHandle && hoveredHandle.type === types[idx] ? COLORS.handleHover : COLORS.handle;
+            ctx.beginPath();
+            ctx.rect(pos.x - config.handleSize / 2, pos.y - config.handleSize / 2, config.handleSize, config.handleSize);
+            ctx.fill();
+            ctx.stroke();
+        });
+    }
+}
+
+// Draw wall measurement
+function drawWallMeasurement(wall) {
+    const dx = wall.x2 - wall.x1;
+    const dy = wall.y2 - wall.y1;
+    const length = Math.sqrt(dx * dx + dy * dy);
+    
+    if (length < 0.1) return;
+    
+    // Calculate midpoint
+    const midX = (wall.x1 + wall.x2) / 2;
+    const midY = (wall.y1 + wall.y2) / 2;
+    const midScreen = worldToScreen(midX, midY, 0);
+    
+    // Calculate angle
+    const angle = Math.atan2(dy, dx) * (180 / Math.PI);
+    
+    // Draw measurement text
+    const text = `${length.toFixed(2)}m`;
+    ctx.font = 'bold 14px sans-serif';
+    const metrics = ctx.measureText(text);
+    const textWidth = metrics.width;
+    const textHeight = 16;
+    
+    // Background
+    ctx.fillStyle = COLORS.measurementBg;
+    ctx.fillRect(
+        midScreen.x - textWidth / 2 - 4,
+        midScreen.y - textHeight / 2 - 2,
+        textWidth + 8,
+        textHeight + 4
+    );
+    
+    // Border
+    ctx.strokeStyle = COLORS.measurement;
+    ctx.lineWidth = 1;
+    ctx.strokeRect(
+        midScreen.x - textWidth / 2 - 4,
+        midScreen.y - textHeight / 2 - 2,
+        textWidth + 8,
+        textHeight + 4
+    );
+    
+    // Text
+    ctx.fillStyle = COLORS.measurement;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(text, midScreen.x, midScreen.y);
+    
+    // Angle display (if not horizontal or vertical)
+    if (Math.abs(angle) > 5 && Math.abs(angle - 90) > 5 && Math.abs(angle + 90) > 5 && Math.abs(angle - 180) > 5) {
+        const angleText = `${Math.abs(angle).toFixed(1)}°`;
+        ctx.font = '12px sans-serif';
+        ctx.fillText(angleText, midScreen.x, midScreen.y + 20);
     }
 }
 
